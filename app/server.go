@@ -7,13 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	// Uncomment this block to pass the first stage
 	// "net"
 	// "os"
-)
-
-const (
-	httpVersion = "HTTP/1.1"
 )
 
 func main() {
@@ -21,7 +18,6 @@ func main() {
 	fmt.Println("Logs from your program will appear here!")
 
 	// Uncomment this block to pass the first stage
-	//
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
@@ -34,30 +30,56 @@ func main() {
 		os.Exit(1)
 	}
 
+	defer func(conn net.Conn) {
+		fmt.Println("Closing Connection")
+		err = conn.Close()
+		if err != nil {
+			fmt.Println("failed to close connection ", err.Error())
+			return
+		}
+	}(conn)
+
 	req, err := getReq(conn)
 	if err != nil {
 		fmt.Println("failed to read conn", err.Error())
 		os.Exit(1)
 	}
 
-	err = processRequest(req).WriteResponse(conn)
+	fmt.Println("Processing Request")
+	resp, err := processRequest(req)
 	if err != nil {
 		fmt.Println("failed process request", err.Error())
 		os.Exit(1)
 	}
-}
 
-func processRequest(req *request.Request) *res.Response {
-	path := req.GetHeader().GetPath()
-	var statusCode int
-	switch path == "/" {
-	case true:
-		statusCode = http.StatusOK
-	default:
-		statusCode = http.StatusNotFound
+	fmt.Println("Writing Response")
+	err = resp.WriteResponse(conn)
+	if err != nil {
+		fmt.Println("failed to write response", err.Error())
+		os.Exit(1)
 	}
 
-	return res.NewResponse(req.GetHeader().GetProtocolVersion(), statusCode)
+}
+
+func processRequest(req *request.Request) (*res.Response, error) {
+	var (
+		data string
+		ok   bool
+	)
+
+	path := req.GetHeader().GetPath()
+	switch path {
+	case "/":
+		data = ""
+	default:
+		data, ok = strings.CutPrefix(path, "/echo/")
+		if !ok {
+			return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusNotFound, "")
+		}
+
+	}
+
+	return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusOK, data)
 }
 
 // readReq read the connection data
