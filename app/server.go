@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/codecrafters-io/http-server-starter-go/app/request"
+	res "github.com/codecrafters-io/http-server-starter-go/app/response"
 	"net"
 	"net/http"
 	"os"
@@ -12,7 +14,6 @@ import (
 
 const (
 	httpVersion = "HTTP/1.1"
-	CRLF        = "\r\n"
 )
 
 func main() {
@@ -33,27 +34,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	_ = readConn(conn)
-
-	responseData := response(nil)
-	_, err = conn.Write(responseData)
+	req, err := getReq(conn)
 	if err != nil {
-		fmt.Println("Failed to write response data: ", err.Error())
+		fmt.Println("failed to read conn", err.Error())
+		os.Exit(1)
+	}
+
+	err = processRequest(req).WriteResponse(conn)
+	if err != nil {
+		fmt.Println("failed process request", err.Error())
 		os.Exit(1)
 	}
 }
 
-// readConn read the connection data
-func readConn(conn net.Conn) []byte {
-	return nil
+func processRequest(req *request.Request) *res.Response {
+	path := req.GetHeader().GetPath()
+	var statusCode int
+	switch path == "/" {
+	case true:
+		statusCode = http.StatusOK
+	default:
+		statusCode = http.StatusNotFound
+	}
+
+	return res.NewResponse(req.GetHeader().GetProtocolVersion(), statusCode)
 }
 
-// response send the response to the connection
-func response(reqData []byte) []byte {
-	// process the request data
+// readReq read the connection data
+func getReq(conn net.Conn) (*request.Request, error) {
+	data := make([]byte, 128)
+	_, err := conn.Read(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request data: %s", err.Error())
+	}
 
-	// response data
-	respHeader := []byte(fmt.Sprintf("%s %d%s%s", httpVersion, http.StatusOK, CRLF, CRLF))
-
-	return respHeader
+	return request.NewRequest(data)
 }
