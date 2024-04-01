@@ -20,14 +20,13 @@ func NewRequest(req []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request")
 	}
 
-	header, err := NewHeader(splitData[0])
+	header, err := NewHeader(splitData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get header: %w", err)
 	}
 
 	return &Request{
 		header: header,
-		data:   nil,
 	}, nil
 }
 

@@ -20,32 +20,25 @@ type Response struct {
 
 func NewResponse(ver protocol.Protocol, code int, data string) (*Response, error) {
 	header := NewResponseHeader(ver, code)
-
 	var (
-		content     *Content
-		err         error
-		skipContent bool
+		content *Content
+		err     error
 	)
-	switch data {
-	case "": // empty request no content available
-		skipContent = true
-	default:
-		content, err = CreateContent(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create content: %w", err)
-		}
+
+	content, err = CreateContent(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create content: %w", err)
 	}
 
 	return &Response{
-		header:      header,
-		content:     content,
-		skipContent: skipContent,
+		header:  header,
+		content: content,
 	}, nil
 }
 
-func (r *Response) writeHeader(w io.Writer, onlyHeader bool) error {
+func (r *Response) writeHeader(w io.Writer, isHeaderWithoutContent bool) error {
 	var endLine string
-	if onlyHeader {
+	if isHeaderWithoutContent {
 		endLine = fmt.Sprintf("%s%s", CRLF, CRLF)
 	} else {
 		endLine = fmt.Sprintf("%s", CRLF)
@@ -62,13 +55,15 @@ func (r *Response) writeHeader(w io.Writer, onlyHeader bool) error {
 func (r *Response) WriteResponse(conn net.Conn) error {
 	var buf bytes.Buffer
 
-	switch r.skipContent {
-	case true:
+	if r.content.length == 0 {
+		// only write the header
+		fmt.Println("Header without content")
 		err := r.writeHeader(&buf, true)
 		if err != nil {
 			return err
 		}
-	default:
+	} else {
+		fmt.Println("Header with Content")
 		err := r.writeHeader(&buf, false)
 		if err != nil {
 			return err
@@ -76,7 +71,7 @@ func (r *Response) WriteResponse(conn net.Conn) error {
 
 		err = r.content.writeData(&buf)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to write content data")
 		}
 	}
 

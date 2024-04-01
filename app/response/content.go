@@ -25,6 +25,10 @@ const (
 )
 
 func CreateContent(data string) (*Content, error) {
+	if data == "/" || data == "" {
+		return &Content{}, nil
+	}
+
 	return &Content{
 		dataType: text,
 		data:     data,
@@ -33,6 +37,10 @@ func CreateContent(data string) (*Content, error) {
 }
 
 func (c *Content) writeData(w io.Writer) error {
+	if c.length == 0 {
+		return nil
+	}
+
 	if _, err := io.WriteString(w, fmt.Sprintf("%s: %s", contentType, c.dataType+CRLF)); err != nil {
 		return fmt.Errorf("failed to write content type: %w", err)
 	}

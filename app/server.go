@@ -13,6 +13,11 @@ import (
 	// "os"
 )
 
+const (
+	echo      = "/echo/"
+	userAgent = "/user-agent"
+)
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -64,19 +69,18 @@ func main() {
 func processRequest(req *request.Request) (*res.Response, error) {
 	var (
 		data string
-		ok   bool
 	)
 
 	path := req.GetHeader().GetPath()
-	switch path {
-	case "/":
+	switch true {
+	case strings.EqualFold(path, "/"):
 		data = ""
+	case strings.HasPrefix(path, echo):
+		data, _ = strings.CutPrefix(path, echo)
+	case strings.HasPrefix(path, userAgent):
+		data = req.GetHeader().GetHeaderVal("user-agent")
 	default:
-		data, ok = strings.CutPrefix(path, "/echo/")
-		if !ok {
-			return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusNotFound, "")
-		}
-
+		return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusNotFound, "")
 	}
 
 	return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusOK, data)
