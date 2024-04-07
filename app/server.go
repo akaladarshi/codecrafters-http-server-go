@@ -29,41 +29,56 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	var (
+		conn    net.Conn
+		counter int
+	)
+
+	defer l.Close()
+
+	for conn, err = l.Accept(); err == nil; conn, err = l.Accept() {
+		counter++
+		fmt.Println("received connection ", counter, " from ", conn.RemoteAddr().String())
+		go func(conn net.Conn) {
+			err := handleConnection(conn)
+			if err != nil {
+				fmt.Println("failed to handle connection ", err.Error())
+				os.Exit(1)
+			}
+		}(conn)
 	}
 
+	fmt.Println("Failed to accept connection")
+}
+
+func handleConnection(conn net.Conn) error {
 	defer func(conn net.Conn) {
 		fmt.Println("Closing Connection")
-		err = conn.Close()
+		err := conn.Close()
 		if err != nil {
-			fmt.Println("failed to close connection ", err.Error())
-			return
+			panic(fmt.Sprintf("failed to close connection: %s", err.Error()))
 		}
 	}(conn)
 
 	req, err := getReq(conn)
 	if err != nil {
-		fmt.Println("failed to read conn", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("failed to read conn: %w", err)
+
 	}
 
 	fmt.Println("Processing Request")
 	resp, err := processRequest(req)
 	if err != nil {
-		fmt.Println("failed process request", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("failed process request: %w", err)
 	}
 
 	fmt.Println("Writing Response")
 	err = resp.WriteResponse(conn)
 	if err != nil {
-		fmt.Println("failed to write response", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("failed to write response: %w", err)
 	}
 
+	return nil
 }
 
 func processRequest(req *request.Request) (*res.Response, error) {

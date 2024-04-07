@@ -33,7 +33,3 @@ func NewRequest(req []byte) (*Request, error) {
 func (r *Request) GetHeader() *Header {
 	return r.header
 }
-
-//func (r *Request) GetPath() string {
-//	return r.header.GetPath()
-//}

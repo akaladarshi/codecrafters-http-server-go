@@ -54,7 +54,7 @@ func ParseHeaderData(data [][]byte) (map[string]string, error) {
 			continue
 		}
 
-		headerData[strings.ToLower(keyValueData[0])] = strings.ToLower(strings.TrimSpace(keyValueData[1]))
+		headerData[strings.ToLower(keyValueData[0])] = strings.TrimSpace(keyValueData[1])
 	}
 
 	return headerData, nil
