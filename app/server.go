@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	// Uncomment this block to pass the first stage
 	// "net"
@@ -17,6 +18,7 @@ import (
 const (
 	echo      = "/echo/"
 	userAgent = "/user-agent"
+	files     = "/files/"
 
 	directoryFlag = "directory"
 )
@@ -109,11 +111,59 @@ func handleConnection(conn net.Conn) error {
 func processRequest(req *request.Request) (*res.Response, error) {
 	var (
 		data       = &res.Content{}
+		statusCode int
+		err        error
+	)
+
+	switch method := req.GetHeader().GetMethod(); method {
+	case request.GET:
+		data, statusCode, err = processGetReq(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process %s request: %w", method, err)
+		}
+	case request.POST:
+		data, statusCode, err = processPostReq(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process %s request: %w", method, err)
+
+		}
+	}
+
+	response := res.NewResponse(req.GetHeader().GetProtocolVersion(), statusCode, data)
+	return response, nil
+}
+
+func processPostReq(req *request.Request) (*res.Content, int, error) {
+	var (
+		content    = &res.Content{}
+		statusCode int
+		err        error
+	)
+
+	path := req.GetHeader().GetPath()
+
+	switch {
+	case strings.HasPrefix(path, files):
+		filePath := filepath.Join(os.Getenv(directoryFlag), strings.TrimPrefix(path, files))
+		err = os.WriteFile(filePath, req.Data(), 0600)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to write request body to the file: %s :%w", filePath, err)
+		}
+
+		statusCode = http.StatusCreated
+	}
+
+	return content, statusCode, nil
+}
+
+func processGetReq(req *request.Request) (*res.Content, int, error) {
+	var (
+		data       = &res.Content{}
 		statusCode = http.StatusOK
 	)
 
 	path := req.GetHeader().GetPath()
-	switch true {
+	switch {
 	case strings.EqualFold(path, "/"):
 		data = res.CreateContent([]byte(""), res.PlainText)
 	case strings.HasPrefix(path, echo):
@@ -121,8 +171,8 @@ func processRequest(req *request.Request) (*res.Response, error) {
 		data = res.CreateContent([]byte(reqData), res.PlainText)
 	case strings.HasPrefix(path, userAgent):
 		data = res.CreateContent([]byte(req.GetHeader().GetHeaderVal("user-agent")), res.PlainText)
-	case strings.HasPrefix(path, "/files/"):
-		requestedFileName := strings.TrimPrefix(path, "/files/")
+	case strings.HasPrefix(path, files):
+		requestedFileName := strings.TrimPrefix(path, files)
 		directoryPath := os.Getenv(directoryFlag)
 		// check if the requested data exist
 		// if it doesn't exist return not found
@@ -137,7 +187,7 @@ func processRequest(req *request.Request) (*res.Response, error) {
 		var dataByte = make([]byte, info.Size())
 		_, err = file.Read(dataByte)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read content of the file: %w", err)
+			return nil, 0, fmt.Errorf("failed to read content of the file: %w", err)
 		}
 
 		data = res.CreateContent(dataByte, res.FileData)
@@ -146,8 +196,7 @@ func processRequest(req *request.Request) (*res.Response, error) {
 		statusCode = http.StatusNotFound
 	}
 
-	response := res.NewResponse(req.GetHeader().GetProtocolVersion(), statusCode, data)
-	return response, nil
+	return data, statusCode, nil
 }
 
 // readReq read the connection data

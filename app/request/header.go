@@ -51,7 +51,8 @@ func ParseHeaderData(data [][]byte) (map[string]string, error) {
 	for _, v := range data {
 		keyValueData := strings.SplitN(string(v), ":", 2)
 		if len(keyValueData) < 2 {
-			continue
+			// no more header data
+			break
 		}
 
 		headerData[strings.ToLower(keyValueData[0])] = strings.TrimSpace(keyValueData[1])
