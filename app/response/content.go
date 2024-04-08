@@ -10,30 +10,34 @@ var (
 	errTypeNotSupported = errors.New("data type not supported")
 )
 
+type DataType string
+
+const (
+	PlainText DataType = "text/plain"
+	FileData           = "application/octet-stream"
+)
+
+func (t DataType) String() string {
+	return string(t)
+}
+
 type Content struct {
-	dataType string
-	data     string
-	length   int64
+	dataType DataType
+	data     []byte
+	length   int
 }
 
 const (
 	contentType = "Content-Type"
 	contentLen  = "Content-Length"
-
-	// content data type
-	text = "text/plain"
 )
 
-func CreateContent(data string) (*Content, error) {
-	if data == "/" || data == "" {
-		return &Content{}, nil
-	}
-
+func CreateContent(data []byte, dataType DataType) *Content {
 	return &Content{
-		dataType: text,
+		dataType: dataType,
 		data:     data,
-		length:   int64(len(data)),
-	}, nil
+		length:   len(data),
+	}
 }
 
 func (c *Content) writeData(w io.Writer) error {
@@ -49,7 +53,15 @@ func (c *Content) writeData(w io.Writer) error {
 		return fmt.Errorf("failed to write content length: %w", err)
 	}
 
-	if _, err := io.WriteString(w, c.data); err != nil {
+	var err error
+	switch c.dataType {
+	case PlainText:
+		_, err = io.WriteString(w, string(c.data))
+	default:
+		_, err = w.Write(c.data)
+	}
+
+	if err != nil {
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 

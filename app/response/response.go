@@ -13,27 +13,16 @@ const (
 )
 
 type Response struct {
-	header      *Header
-	content     *Content
-	skipContent bool
+	header  *Header
+	content *Content
 }
 
-func NewResponse(ver protocol.Protocol, code int, data string) (*Response, error) {
+func NewResponse(ver protocol.Protocol, code int, content *Content) *Response {
 	header := NewResponseHeader(ver, code)
-	var (
-		content *Content
-		err     error
-	)
-
-	content, err = CreateContent(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create content: %w", err)
-	}
-
 	return &Response{
 		header:  header,
 		content: content,
-	}, nil
+	}
 }
 
 func (r *Response) writeHeader(w io.Writer, isHeaderWithoutContent bool) error {
@@ -80,5 +69,6 @@ func (r *Response) WriteResponse(conn net.Conn) error {
 		return fmt.Errorf("failed to write response to connection: %w", err)
 	}
 
+	fmt.Println("Finish writing response")
 	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/codecrafters-io/http-server-starter-go/app/request"
 	res "github.com/codecrafters-io/http-server-starter-go/app/response"
@@ -16,11 +17,20 @@ import (
 const (
 	echo      = "/echo/"
 	userAgent = "/user-agent"
+
+	directoryFlag = "directory"
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
+
+	err := loadFlagsAsENV()
+	if err != nil {
+		fmt.Println("failed to load flags", err.Error())
+		os.Exit(1)
+	}
+
+	fmt.Println("Starting listener")
 
 	// Uncomment this block to pass the first stage
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -36,6 +46,8 @@ func main() {
 
 	defer l.Close()
 
+	fmt.Println("Accepting connections")
+
 	for conn, err = l.Accept(); err == nil; conn, err = l.Accept() {
 		counter++
 		fmt.Println("received connection ", counter, " from ", conn.RemoteAddr().String())
@@ -45,25 +57,38 @@ func main() {
 				fmt.Println("failed to handle connection ", err.Error())
 				os.Exit(1)
 			}
+
+			conn.Close()
 		}(conn)
 	}
 
 	fmt.Println("Failed to accept connection")
 }
 
-func handleConnection(conn net.Conn) error {
-	defer func(conn net.Conn) {
-		fmt.Println("Closing Connection")
-		err := conn.Close()
-		if err != nil {
-			panic(fmt.Sprintf("failed to close connection: %s", err.Error()))
-		}
-	}(conn)
+func loadFlagsAsENV() error {
+	// if we are running binary for other stages then no flags will be available
+	if len(os.Args) < 2 {
+		return nil
+	}
 
+	fmt.Println("loading flags")
+
+	var directory string
+	flag.StringVar(&directory, directoryFlag, "", "directory to serve")
+
+	flag.Parse()
+
+	if directory == "" {
+		return fmt.Errorf("empty directory provided")
+	}
+
+	return os.Setenv(directoryFlag, directory)
+}
+
+func handleConnection(conn net.Conn) error {
 	req, err := getReq(conn)
 	if err != nil {
 		return fmt.Errorf("failed to read conn: %w", err)
-
 	}
 
 	fmt.Println("Processing Request")
@@ -83,31 +108,55 @@ func handleConnection(conn net.Conn) error {
 
 func processRequest(req *request.Request) (*res.Response, error) {
 	var (
-		data string
+		data       = &res.Content{}
+		statusCode = http.StatusOK
 	)
 
 	path := req.GetHeader().GetPath()
 	switch true {
 	case strings.EqualFold(path, "/"):
-		data = ""
+		data = res.CreateContent([]byte(""), res.PlainText)
 	case strings.HasPrefix(path, echo):
-		data, _ = strings.CutPrefix(path, echo)
+		reqData, _ := strings.CutPrefix(path, echo)
+		data = res.CreateContent([]byte(reqData), res.PlainText)
 	case strings.HasPrefix(path, userAgent):
-		data = req.GetHeader().GetHeaderVal("user-agent")
+		data = res.CreateContent([]byte(req.GetHeader().GetHeaderVal("user-agent")), res.PlainText)
+	case strings.HasPrefix(path, "/files/"):
+		requestedFileName := strings.TrimPrefix(path, "/files/")
+		directoryPath := os.Getenv(directoryFlag)
+		// check if the requested data exist
+		// if it doesn't exist return not found
+		file, err := os.DirFS(directoryPath).Open(requestedFileName)
+		if err != nil {
+			statusCode = http.StatusNotFound
+			break
+		}
+
+		// read data
+		info, _ := file.Stat()
+		var dataByte = make([]byte, info.Size())
+		_, err = file.Read(dataByte)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read content of the file: %w", err)
+		}
+
+		data = res.CreateContent(dataByte, res.FileData)
+
 	default:
-		return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusNotFound, "")
+		statusCode = http.StatusNotFound
 	}
 
-	return res.NewResponse(req.GetHeader().GetProtocolVersion(), http.StatusOK, data)
+	response := res.NewResponse(req.GetHeader().GetProtocolVersion(), statusCode, data)
+	return response, nil
 }
 
 // readReq read the connection data
 func getReq(conn net.Conn) (*request.Request, error) {
-	data := make([]byte, 128)
-	_, err := conn.Read(data)
+	data := make([]byte, 4096)
+	n, err := conn.Read(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request data: %s", err.Error())
 	}
 
-	return request.NewRequest(data)
+	return request.NewRequest(data[:n])
 }
